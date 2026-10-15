@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lab-cron
+spec:
+  suspend: true
+  schedule: "*/2 * * * *"        # every 2 minutes, for testing; suspend it when you're done
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: lab
+              image: lab-job:0.1
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: STATE_DIR
+                  value: /state
+              envFrom:
+                - configMapRef:
+                    name: lab-config
+                - secretRef:
+                    name: lab-secret
+              volumeMounts:
+                - name: state
+                  mountPath: /state
+          volumes:
+            - name: state
+              persistentVolumeClaim:
+                claimName: lab-state

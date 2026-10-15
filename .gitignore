@@ -1,0 +1,4 @@
+state/
+*.env
+.env
+__pycache__/
