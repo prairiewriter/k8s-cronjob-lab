@@ -25,12 +25,3 @@ survives between runs (PersistentVolumeClaim).
 4. Create the CronJob and trigger a run
 5. Confirm state persists across runs
 6. Clean up
-
-## Troubleshooting
-
-<!-- TODO: for each failure you provoked on purpose, record: what you did, the symptom,
-     the command that revealed the cause, and the fix. -->
-
-## What this lab doesn't cover
-
-<!-- TODO: be specific and honest, for example: single-node local cluster, no registry, no real secret management. -->
