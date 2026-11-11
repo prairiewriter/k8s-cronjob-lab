@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: peek
+spec:
+  restartPolicy: Never
+  containers:
+    - name: peek
+      image: lab-job:0.1
+      imagePullPolicy: IfNotPresent
+      command: ["cat", "/state/runs.txt"]
+      volumeMounts:
+        - name: state
+          mountPath: /state
+  volumes:
+    - name: state
+      persistentVolumeClaim:
+        claimName: lab-state

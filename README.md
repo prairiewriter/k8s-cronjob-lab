@@ -22,7 +22,7 @@ I ran everything on Windows 11 in PowerShell, with:
 
 - `app/app.py`: a tiny Python job. It prints a greeting from the ConfigMap, confirms the Secret is set without printing it, and counts its runs in a file on the volume.
 - `Dockerfile`: packages the app as the image `lab-job:0.1`.
-- `manifests/configmap.yaml`, `manifests/pvc.yaml`, `manifests/cronjob.yaml`: the Kubernetes objects. The CronJob runs every two minutes so you don't wait long to see it work.
+- `manifests/configmap.yaml`, `manifests/pvc.yaml`, `manifests/cronjob.yaml`: the Kubernetes objects. The CronJob's schedule is every two minutes, but the manifest ships suspended (`suspend: true`), so jobs only run when you trigger them. That keeps the run count predictable while you follow along.
 
 ## Run it
 
@@ -122,17 +122,31 @@ spec:
         claimName: lab-state
 ```
 
+It's in the repo as `manifests/peek.yaml`.
+
 ```
-kubectl apply -f peek.yaml
+kubectl apply -f manifests/peek.yaml
 kubectl logs peek
 kubectl delete pod peek
 ```
 
-[TODO: paste what `kubectl logs peek` printed.]
+The file holds one timestamp per run (UTC). After my seven runs, it printed:
+
+```
+2026-11-11T14:49:50.088952+00:00
+2026-11-11T14:49:51.804409+00:00
+2026-11-11T14:49:56.765641+00:00
+2026-11-11T14:50:24.468990+00:00
+2026-11-11T15:04:37.812931+00:00
+2026-11-11T15:07:01.681872+00:00
+2026-11-11T15:07:09.029049+00:00
+```
+
+The last two runs are eight seconds apart. That's the failed `nosecret-1` pod starting as soon as I re-created the Secret, just before `good-5` (see [Missing Secret](#missing-secret)).
 
 ### 7. Clean up
 
-To stop the schedule but keep everything, add `suspend: true` under `spec:` in `manifests/cronjob.yaml` and apply it again. To remove everything:
+To watch the schedule run on its own, change `suspend: true` to `suspend: false` in `manifests/cronjob.yaml`, apply it, and run `kubectl get jobs -w`. A new job appears every two minutes. Set it back to `true` to stop it. To remove everything:
 
 ```
 kind delete cluster --name cronjob-lab
@@ -179,7 +193,13 @@ kubectl create job --from=cronjob/lab-cron good-4
 kubectl logs job/good-4
 ```
 
-[TODO: paste what `good-4` printed. My unsaved first attempt ran the good image and used run number 4, so expect 5.]
+```
+Greeting: Hello from a ConfigMap
+API_TOKEN is set (22 characters; value not printed)
+This is run number 5 (state file: /state/runs.txt)
+```
+
+Run number 5, not 4: my unsaved first attempt had run the good image and used number 4. The count is still intact, which shows the failed pull didn't touch the volume.
 
 ### Missing Secret
 
@@ -191,7 +211,7 @@ kubectl create job --from=cronjob/lab-cron nosecret-1
 kubectl get pods
 ```
 
-**Symptom:** the pod never started:
+**Symptom:** the pod never started. This output is from my first run of the drill, in October:
 
 ```
 NAME               READY   STATUS                       RESTARTS   AGE
@@ -200,7 +220,12 @@ nosecret-1-bx7wv   0/1     CreateContainerConfigError   0          10s
 
 This is different from the image failure. The image was fine; Kubernetes blocked the container before it started because configuration it needed was missing.
 
-**How I found the cause:** `kubectl describe pod nosecret-1-bx7wv`. [TODO: the event message you saw.]
+**How I found the cause:** `kubectl describe pod <pod-name>`, using the name from `get pods`. The Events showed the image was fine but the container couldn't be created:
+
+```
+Normal   Pulled   Container image "lab-job:0.1" already present on machine and can be accessed by the pod
+Warning  Failed   Error: secret "lab-secret" not found
+```
 
 **Fix:** re-create the Secret, delete the failed job, and run a good job:
 
@@ -211,7 +236,13 @@ kubectl create job --from=cronjob/lab-cron good-5
 kubectl logs job/good-5
 ```
 
-[TODO: paste what `good-5` printed. The failed job never ran the app, so it shouldn't have used a run number.]
+I expected run number 6 and got 7:
+
+```
+This is run number 7 (state file: /state/runs.txt)
+```
+
+The schedule wasn't the cause. `kubectl get jobs` showed no scheduled jobs, and `kubectl get cronjob lab-cron` showed `SUSPEND True`. The state file settles it: runs 6 and 7 are eight seconds apart (see [step 6](#6-look-inside-the-volume-optional)). The failed pod recovered on its own: the kubelet kept retrying, and once the Secret was back, `nosecret-1` started and used run 6 before I deleted it. Lesson: fixing the cause can let a failing pod recover by itself. For a clean test, delete the failed job first, then fix the cause.
 
 ### Deleting a PVC that's still in use
 
