@@ -16,7 +16,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: lab
-              image: lab-job:0.1
+              image: lab-job:9.9
               imagePullPolicy: IfNotPresent
               env:
                 - name: STATE_DIR

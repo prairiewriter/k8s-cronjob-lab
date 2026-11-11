@@ -148,15 +148,38 @@ I broke the lab on purpose to see what each failure looks like and which command
 
 ```
 kubectl apply -f manifests/cronjob.yaml
-kubectl create job --from=cronjob/lab-cron broken-1
+kubectl create job --from=cronjob/lab-cron broken-2
 kubectl get pods
 ```
 
-**Symptom:** [TODO: the STATUS you saw for `broken-1`, for example `ErrImagePull`, then `ImagePullBackOff`.]
+My first attempt didn't break anything: `apply` said `cronjob.batch/lab-cron unchanged`, and `describe` showed the pod had pulled `lab-job:0.1`. I hadn't saved the file. `Select-String -Path manifests/cronjob.yaml -Pattern "image:"` confirms what the file on disk actually says. Once it was saved, `apply` said `configured`.
 
-**How I found the cause:** `kubectl describe pod <pod-name>`, using the real pod name from `get pods`. The Events section at the bottom said [TODO: the event message you saw].
+**Symptom:**
 
-**Fix:** set the image back to `lab-job:0.1`, apply, delete `broken-1`, and run a good job. [TODO: confirm what `good-4` printed.]
+```
+broken-2-psgj8   0/1     ErrImagePull   0          9s
+```
+
+As Kubernetes keeps retrying, the status alternates with `ImagePullBackOff`.
+
+**How I found the cause:** `kubectl describe pod broken-2-psgj8`. The Events showed:
+
+```
+Failed to pull image "lab-job:9.9": failed to pull and unpack image "docker.io/library/lab-job:9.9": failed to resolve reference "docker.io/library/lab-job:9.9": pull access denied, repository does not exist or may require authorization
+```
+
+The tag wasn't on the node, so Kubernetes tried Docker Hub, the default registry when an image name doesn't include one, and found nothing.
+
+**Fix:** set the image back to `lab-job:0.1`, apply, delete the broken jobs, and run a good job:
+
+```
+kubectl apply -f manifests/cronjob.yaml
+kubectl delete job broken-1 broken-2
+kubectl create job --from=cronjob/lab-cron good-4
+kubectl logs job/good-4
+```
+
+[TODO: paste what `good-4` printed. My unsaved first attempt ran the good image and used run number 4, so expect 5.]
 
 ### Missing Secret
 
@@ -188,7 +211,7 @@ kubectl create job --from=cronjob/lab-cron good-5
 kubectl logs job/good-5
 ```
 
-[TODO: confirm what `good-5` printed. The failed job never ran the app, so I expected run number 5.]
+[TODO: paste what `good-5` printed. The failed job never ran the app, so it shouldn't have used a run number.]
 
 ### Deleting a PVC that's still in use
 
